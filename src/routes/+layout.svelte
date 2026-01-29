@@ -18,7 +18,8 @@
 		Settings,
 		Database,
 		Zap,
-		RefreshCw
+		RefreshCw,
+		PanelTop
 	} from 'lucide-svelte';
 
 	const queryClient = new QueryClient({
@@ -41,6 +42,7 @@
 
 	const navItems = [
 		{ href: '/', label: 'Dashboard', icon: LayoutDashboard },
+		{ href: '/board', label: 'Board', icon: PanelTop },
 		{ href: '/projects', label: 'Projects', icon: FolderKanban },
 		{ href: '/features', label: 'Features', icon: ListChecks },
 		{ href: '/sessions', label: 'Sessions', icon: Clock },

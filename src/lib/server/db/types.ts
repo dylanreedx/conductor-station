@@ -262,6 +262,30 @@ export interface QualityFilters {
 	limit?: number;
 }
 
+export interface HandoffFilters {
+	sourceAlias?: string;
+	projectId?: string;
+	sessionId?: string; // Composite ID
+	limit?: number;
+}
+
+export interface CommitFilters {
+	sourceAlias?: string;
+	projectId?: string; // Composite - filter by project via session
+	sessionId?: string; // Composite ID
+	featureId?: string; // Composite ID
+	limit?: number;
+}
+
+export interface FeatureErrorFilters {
+	sourceAlias?: string;
+	projectId?: string;
+	sessionId?: string; // Composite ID
+	featureId?: string; // Composite ID
+	errorType?: FeatureError['error_type'];
+	limit?: number;
+}
+
 // ===================
 // CONFIG
 // ===================

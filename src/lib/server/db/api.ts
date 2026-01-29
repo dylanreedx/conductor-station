@@ -13,17 +13,26 @@ import type {
 	Session,
 	Feature,
 	Memory,
+	Handoff,
+	Commit,
+	FeatureError,
 	QualityReflection,
 	AggregatedProject,
 	AggregatedSession,
 	AggregatedFeature,
 	AggregatedMemory,
+	AggregatedHandoff,
+	AggregatedCommit,
+	AggregatedFeatureError,
 	AggregatedQualityReflection,
 	ProjectFilters,
 	FeatureFilters,
 	SessionFilters,
 	MemoryFilters,
 	QualityFilters,
+	HandoffFilters,
+	CommitFilters,
+	FeatureErrorFilters,
 	DashboardStats,
 	SyncState,
 	Config
@@ -579,6 +588,248 @@ class ConductorAPI {
 		const sources = databases.map((d) => d.meta.alias);
 		queryCache.set(cacheKey, results, { invalidatedBy: sources });
 
+		return results;
+	}
+
+	// ===================
+	// HANDOFFS
+	// ===================
+
+	/**
+	 * Get handoffs across all databases
+	 */
+	getHandoffs(filters?: HandoffFilters): AggregatedHandoff[] {
+		const cacheKey = queryCache.makeKey('handoffs', filters);
+		const cached = queryCache.get<AggregatedHandoff[]>(cacheKey);
+		if (cached) return cached;
+
+		const results: AggregatedHandoff[] = [];
+		let databases = getActiveDatabases();
+		let projectIdFilter: string | undefined;
+		let sessionIdFilter: string | undefined;
+
+		if (filters?.sourceAlias) {
+			const conn = getDatabase(filters.sourceAlias);
+			databases = conn ? [conn] : [];
+		}
+		if (filters?.projectId) {
+			const [alias, id] = this.parseCompositeId(filters.projectId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			projectIdFilter = id;
+		}
+		if (filters?.sessionId) {
+			const [alias, id] = this.parseCompositeId(filters.sessionId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			sessionIdFilter = id;
+		}
+
+		for (const conn of databases) {
+			let sql = 'SELECT * FROM handoffs WHERE 1=1';
+			const params: unknown[] = [];
+			if (projectIdFilter) {
+				sql += ' AND project_id = ?';
+				params.push(projectIdFilter);
+			}
+			if (sessionIdFilter) {
+				sql += ' AND session_id = ?';
+				params.push(sessionIdFilter);
+			}
+			sql += ' ORDER BY created_at DESC';
+			if (filters?.limit) {
+				sql += ' LIMIT ?';
+				params.push(filters.limit);
+			}
+			try {
+				const handoffs = conn.db.prepare(sql).all(...params) as Handoff[];
+				for (const h of handoffs) {
+					results.push({
+						...h,
+						_id: `${conn.meta.alias}:${h.id}`,
+						_projectId: `${conn.meta.alias}:${h.project_id}`,
+						_sessionId: `${conn.meta.alias}:${h.session_id}`,
+						_sourceDb: conn.meta.path,
+						_sourceAlias: conn.meta.alias
+					});
+				}
+			} catch (error) {
+				console.error(`[ConductorAPI] Error querying handoffs from ${conn.meta.alias}:`, error);
+			}
+		}
+		const sources = databases.map((d) => d.meta.alias);
+		queryCache.set(cacheKey, results, { invalidatedBy: sources });
+		return results;
+	}
+
+	// ===================
+	// COMMITS
+	// ===================
+
+	/**
+	 * Get commits across all databases
+	 */
+	getCommits(filters?: CommitFilters): AggregatedCommit[] {
+		const cacheKey = queryCache.makeKey('commits', filters);
+		const cached = queryCache.get<AggregatedCommit[]>(cacheKey);
+		if (cached) return cached;
+
+		const results: AggregatedCommit[] = [];
+		let databases = getActiveDatabases();
+		let sessionIdFilter: string | undefined;
+		let featureIdFilter: string | undefined;
+		let projectIdFilter: string | undefined;
+
+		if (filters?.sourceAlias) {
+			const conn = getDatabase(filters.sourceAlias);
+			databases = conn ? [conn] : [];
+		}
+		if (filters?.projectId) {
+			const [alias, id] = this.parseCompositeId(filters.projectId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			projectIdFilter = id;
+		}
+		if (filters?.sessionId) {
+			const [alias, id] = this.parseCompositeId(filters.sessionId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			sessionIdFilter = id;
+		}
+		if (filters?.featureId) {
+			const [alias, id] = this.parseCompositeId(filters.featureId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			featureIdFilter = id;
+		}
+
+		for (const conn of databases) {
+			let sql = 'SELECT * FROM commits WHERE 1=1';
+			const params: unknown[] = [];
+			if (sessionIdFilter) {
+				sql += ' AND session_id = ?';
+				params.push(sessionIdFilter);
+			}
+			if (featureIdFilter) {
+				sql += ' AND feature_id = ?';
+				params.push(featureIdFilter);
+			}
+			if (projectIdFilter) {
+				sql += ' AND session_id IN (SELECT id FROM sessions WHERE project_id = ?)';
+				params.push(projectIdFilter);
+			}
+			sql += ' ORDER BY created_at DESC';
+			if (filters?.limit) {
+				sql += ' LIMIT ?';
+				params.push(filters.limit);
+			}
+			try {
+				const commits = conn.db.prepare(sql).all(...params) as Commit[];
+				for (const c of commits) {
+					results.push({
+						...c,
+						_id: `${conn.meta.alias}:${c.id}`,
+						_featureId: `${conn.meta.alias}:${c.feature_id}`,
+						_sessionId: `${conn.meta.alias}:${c.session_id}`,
+						_sourceDb: conn.meta.path,
+						_sourceAlias: conn.meta.alias
+					});
+				}
+			} catch (error) {
+				console.error(`[ConductorAPI] Error querying commits from ${conn.meta.alias}:`, error);
+			}
+		}
+		const sources = databases.map((d) => d.meta.alias);
+		queryCache.set(cacheKey, results, { invalidatedBy: sources });
+		return results;
+	}
+
+	// ===================
+	// FEATURE ERRORS
+	// ===================
+
+	/**
+	 * Get feature errors across all databases
+	 */
+	getFeatureErrors(filters?: FeatureErrorFilters): AggregatedFeatureError[] {
+		const cacheKey = queryCache.makeKey('featureErrors', filters);
+		const cached = queryCache.get<AggregatedFeatureError[]>(cacheKey);
+		if (cached) return cached;
+
+		const results: AggregatedFeatureError[] = [];
+		let databases = getActiveDatabases();
+		let projectIdFilter: string | undefined;
+		let sessionIdFilter: string | undefined;
+		let featureIdFilter: string | undefined;
+
+		if (filters?.sourceAlias) {
+			const conn = getDatabase(filters.sourceAlias);
+			databases = conn ? [conn] : [];
+		}
+		if (filters?.projectId) {
+			const [alias, id] = this.parseCompositeId(filters.projectId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			projectIdFilter = id;
+		}
+		if (filters?.sessionId) {
+			const [alias, id] = this.parseCompositeId(filters.sessionId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			sessionIdFilter = id;
+		}
+		if (filters?.featureId) {
+			const [alias, id] = this.parseCompositeId(filters.featureId);
+			const conn = getDatabase(alias);
+			databases = conn ? [conn] : [];
+			featureIdFilter = id;
+		}
+
+		for (const conn of databases) {
+			let sql = 'SELECT * FROM feature_errors WHERE 1=1';
+			const params: unknown[] = [];
+			if (projectIdFilter) {
+				sql += ' AND session_id IN (SELECT id FROM sessions WHERE project_id = ?)';
+				params.push(projectIdFilter);
+			}
+			if (sessionIdFilter) {
+				sql += ' AND session_id = ?';
+				params.push(sessionIdFilter);
+			}
+			if (featureIdFilter) {
+				sql += ' AND feature_id = ?';
+				params.push(featureIdFilter);
+			}
+			if (filters?.errorType) {
+				sql += ' AND error_type = ?';
+				params.push(filters.errorType);
+			}
+			sql += ' ORDER BY created_at DESC';
+			if (filters?.limit) {
+				sql += ' LIMIT ?';
+				params.push(filters.limit);
+			}
+			try {
+				const errors = conn.db.prepare(sql).all(...params) as FeatureError[];
+				for (const e of errors) {
+					results.push({
+						...e,
+						_id: `${conn.meta.alias}:${e.id}`,
+						_featureId: `${conn.meta.alias}:${e.feature_id}`,
+						_sessionId: `${conn.meta.alias}:${e.session_id}`,
+						_sourceDb: conn.meta.path,
+						_sourceAlias: conn.meta.alias
+					});
+				}
+			} catch (error) {
+				console.error(
+					`[ConductorAPI] Error querying feature_errors from ${conn.meta.alias}:`,
+					error
+				);
+			}
+		}
+		const sources = databases.map((d) => d.meta.alias);
+		queryCache.set(cacheKey, results, { invalidatedBy: sources });
 		return results;
 	}
 
