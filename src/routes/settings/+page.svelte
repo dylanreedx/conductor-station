@@ -52,7 +52,8 @@
 			<CardDescription>
 				Directories to scan for <code class="rounded bg-muted px-1 py-0.5"
 					>.conductor/conductor.db</code
-				> files. Changes take effect after saving.
+				> files. Parent directories (we scan inside) and single project paths both go here. Changes take
+				effect after saving.
 			</CardDescription>
 		</CardHeader>
 		<CardContent class="space-y-4">
@@ -96,6 +97,14 @@
 					<p class="text-sm text-muted-foreground">Add at least one path, then save.</p>
 				{/if}
 			</form>
+			{#if paths.length > 0}
+				<form method="post" action="?/rescan" class="mt-4 border-t pt-4">
+					<Button type="submit" variant="secondary">Rescan (pick up new projects)</Button>
+					<p class="mt-2 text-xs text-muted-foreground">
+						Re-scans your paths without saving. Use after creating new Conductor projects.
+					</p>
+				</form>
+			{/if}
 		</CardContent>
 	</Card>
 

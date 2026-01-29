@@ -14,6 +14,15 @@ export const load: PageServerLoad = async () => {
 
 export const actions: Actions = {
 	/**
+	 * Rescan current paths (no path changes). Use when you've added new projects under existing parent dirs.
+	 */
+	rescan: async () => {
+		const config = loadConfig();
+		conductorAPI.rescan(config);
+		throw redirect(303, '/settings');
+	},
+
+	/**
 	 * Update scan paths and rescan
 	 */
 	save: async ({ request }) => {

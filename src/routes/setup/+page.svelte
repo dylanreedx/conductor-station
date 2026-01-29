@@ -29,27 +29,52 @@
 	};
 
 	let step = $state<1 | 2 | 3>(1);
-	let paths = $state<string[]>([]);
-	let newPath = $state('');
+	let parentDirs = $state<string[]>([]);
+	let singlePaths = $state<string[]>([]);
+	let newParentPath = $state('');
+	let newSinglePath = $state('');
 	let databases = $state<Database[]>([]);
 	let scanning = $state(false);
 	let error = $state<string | null>(null);
 
-	function addPath() {
-		if (newPath.trim() && !paths.includes(newPath.trim())) {
-			paths = [...paths, newPath.trim()];
-			newPath = '';
+	// Merged for form submit (same scanPaths config)
+	let paths = $derived([...parentDirs, ...singlePaths]);
+
+	function addParentDir() {
+		const trimmed = newParentPath.trim();
+		if (trimmed && !parentDirs.includes(trimmed)) {
+			parentDirs = [...parentDirs, trimmed];
+			newParentPath = '';
 		}
 	}
 
-	function removePath(path: string) {
-		paths = paths.filter((p) => p !== path);
+	function removeParentDir(path: string) {
+		parentDirs = parentDirs.filter((p) => p !== path);
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
+	function addSinglePath() {
+		const trimmed = newSinglePath.trim();
+		if (trimmed && !singlePaths.includes(trimmed)) {
+			singlePaths = [...singlePaths, trimmed];
+			newSinglePath = '';
+		}
+	}
+
+	function removeSinglePath(path: string) {
+		singlePaths = singlePaths.filter((p) => p !== path);
+	}
+
+	function handleParentKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			e.preventDefault();
-			addPath();
+			addParentDir();
+		}
+	}
+
+	function handleSingleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			addSinglePath();
 		}
 	}
 </script>
@@ -90,48 +115,94 @@
 				</Button>
 			</CardContent>
 		{:else if step === 2}
-			<!-- Step 2: Add Paths -->
+			<!-- Step 2: Add Paths (parent dirs + single-path fallback) -->
 			<CardHeader>
 				<CardTitle class="flex items-center gap-2">
 					<FolderSearch class="h-5 w-5" />
 					Add Scan Paths
 				</CardTitle>
 				<CardDescription>
-					Add directories to scan for Conductor databases. You can add multiple paths.
+					Add parent directories (e.g. ~/work, ~/personal) and we'll find all Conductor DBs inside.
+					You can also add a single project path if it's outside these.
 				</CardDescription>
 			</CardHeader>
-			<CardContent class="space-y-4">
-				<div class="flex gap-2">
-					<Input
-						type="text"
-						placeholder="/path/to/your/projects"
-						bind:value={newPath}
-						onkeydown={handleKeydown}
-						class="flex-1"
-					/>
-					<Button variant="outline" onclick={addPath} disabled={!newPath.trim()}>
-						<Plus class="h-4 w-4" />
-					</Button>
+			<CardContent class="space-y-6">
+				<!-- Parent directories -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Parent directories</p>
+					<p class="text-xs text-muted-foreground">
+						We scan recursively inside each. Add multiple (e.g. work and personal).
+					</p>
+					<div class="flex gap-2">
+						<Input
+							type="text"
+							placeholder="e.g. /Users/you/work or ~/personal"
+							bind:value={newParentPath}
+							onkeydown={handleParentKeydown}
+							class="flex-1"
+						/>
+						<Button variant="outline" onclick={addParentDir} disabled={!newParentPath.trim()}>
+							<Plus class="h-4 w-4" />
+						</Button>
+					</div>
+					{#if parentDirs.length > 0}
+						<div class="space-y-1">
+							{#each parentDirs as path}
+								<div
+									class="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2"
+								>
+									<code class="text-sm">{path}</code>
+									<Button variant="ghost" size="sm" onclick={() => removeParentDir(path)}>
+										<Trash2 class="h-4 w-4 text-destructive" />
+									</Button>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
 
-				{#if paths.length > 0}
-					<div class="space-y-2">
-						{#each paths as path}
-							<div
-								class="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2"
-							>
-								<code class="text-sm">{path}</code>
-								<Button variant="ghost" size="sm" onclick={() => removePath(path)}>
-									<Trash2 class="h-4 w-4 text-destructive" />
-								</Button>
-							</div>
-						{/each}
+				<Separator />
+
+				<!-- Single project path (fallback) -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Single project path</p>
+					<p class="text-xs text-muted-foreground">
+						Add one directory at a time for projects outside the parents above or if the scan missed
+						one.
+					</p>
+					<div class="flex gap-2">
+						<Input
+							type="text"
+							placeholder="/path/to/single/project"
+							bind:value={newSinglePath}
+							onkeydown={handleSingleKeydown}
+							class="flex-1"
+						/>
+						<Button variant="outline" onclick={addSinglePath} disabled={!newSinglePath.trim()}>
+							<Plus class="h-4 w-4" />
+						</Button>
 					</div>
-				{:else}
+					{#if singlePaths.length > 0}
+						<div class="space-y-1">
+							{#each singlePaths as path}
+								<div
+									class="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2"
+								>
+									<code class="text-sm">{path}</code>
+									<Button variant="ghost" size="sm" onclick={() => removeSinglePath(path)}>
+										<Trash2 class="h-4 w-4 text-destructive" />
+									</Button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				{#if paths.length === 0}
 					<div
-						class="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground"
+						class="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground"
 					>
-						No paths added yet. Add a directory path above.
+						Add at least one path above (parent directory or single project).
 					</div>
 				{/if}
 

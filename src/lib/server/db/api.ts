@@ -95,6 +95,7 @@ class ConductorAPI {
 	 */
 	shutdown(): void {
 		syncEngine.stop();
+		syncEngine.clearMtimes();
 		closeAll();
 		queryCache.clear();
 		this.initialized = false;

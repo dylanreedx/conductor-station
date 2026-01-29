@@ -176,9 +176,11 @@ class SyncEngine {
 	}
 
 	/**
-	 * Initialize mtime tracking for all current databases
+	 * Initialize mtime tracking for all current databases.
+	 * Clears stale entries first so rescans don't leave old paths in the map.
 	 */
 	initializeMtimes(): void {
+		this.dbMtimes.clear();
 		const databases = getActiveDatabases();
 		for (const { meta } of databases) {
 			if (existsSync(meta.path)) {

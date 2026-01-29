@@ -17,8 +17,11 @@
 		CheckCircle2,
 		XCircle,
 		Loader2,
-		Ban
+		Ban,
+		ArrowRight
 	} from 'lucide-svelte';
+	import { PieChart } from 'layerchart';
+	import { format } from 'date-fns';
 
 	let { data } = $props();
 
@@ -37,6 +40,53 @@
 		in_progress: 'text-blue-500',
 		blocked: 'text-orange-500'
 	};
+
+	// Colors per status for the pie chart
+	const statusChartColors: Record<string, string> = {
+		passed: '#22c55e',
+		pending: '#6b7280',
+		in_progress: '#3b82f6',
+		failed: '#ef4444',
+		blocked: '#f97316'
+	};
+
+	// Display labels for statuses
+	const statusLabels: Record<string, string> = {
+		passed: 'Passed',
+		pending: 'Pending',
+		in_progress: 'In Progress',
+		failed: 'Failed',
+		blocked: 'Blocked'
+	};
+
+	// Chart data: features by status with colors for pie chart
+	const pieChartData = $derived(
+		Object.entries(data.stats.featuresByStatus ?? {}).map(([status, count]) => ({
+			status,
+			label: statusLabels[status] ?? status,
+			value: count as number,
+			color: statusChartColors[status] ?? '#6b7280'
+		}))
+	);
+
+	// Total for center display
+	const totalFeatures = $derived(pieChartData.reduce((sum, d) => sum + d.value, 0));
+
+	function formatSessionTime(ts: number | null): string {
+		if (ts == null) return '—';
+		const ms = ts < 1e12 ? ts * 1000 : ts;
+		return format(new Date(ms), 'MMM d, HH:mm');
+	}
+
+	function formatMemoryTime(ts: number): string {
+		const ms = ts < 1e12 ? ts * 1000 : ts;
+		return format(new Date(ms), 'MMM d');
+	}
+
+	function truncate(str: string, maxLen: number): string {
+		if (str.length <= maxLen) return str;
+		return str.slice(0, maxLen) + '…';
+	}
 </script>
 
 <div class="space-y-6 p-6">
@@ -131,6 +181,146 @@
 			</CardContent>
 		</Card>
 	{/if}
+
+	<!-- Features by status (pie chart) -->
+	{#if pieChartData.length > 0}
+		<Card>
+			<CardHeader>
+				<CardTitle class="text-base">Tasks by status</CardTitle>
+				<CardDescription>Feature count per status across all projects</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<div class="flex items-center justify-center">
+					<div class="relative h-[250px] w-[250px]">
+						<PieChart
+							data={pieChartData}
+							value="value"
+							key="status"
+							c="color"
+							innerRadius={0.6}
+							props={{
+								tooltip: {
+									root: {
+										classes: {
+											container:
+												'border border-border/60 shadow-sm rounded-md bg-background/95 backdrop-blur-sm'
+										}
+									}
+								}
+							}}
+						/>
+						<!-- Center text -->
+						<div
+							class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+						>
+							<span class="text-3xl font-bold">{totalFeatures}</span>
+							<span class="text-sm text-muted-foreground">total</span>
+						</div>
+					</div>
+				</div>
+				<!-- Legend -->
+				<div class="mt-4 flex flex-wrap justify-center gap-4">
+					{#each pieChartData as item}
+						<div class="flex items-center gap-2">
+							<div class="h-3 w-3 rounded-sm" style="background-color: {item.color}"></div>
+							<span class="text-sm text-muted-foreground">{item.label}</span>
+							<span class="text-sm font-medium">{item.value}</span>
+						</div>
+					{/each}
+				</div>
+			</CardContent>
+		</Card>
+	{/if}
+
+	<!-- Recent sessions and Recent memories -->
+	<div class="grid gap-4 md:grid-cols-2">
+		<Card>
+			<CardHeader>
+				<CardTitle class="flex items-center gap-2">
+					<Clock class="h-5 w-5" />
+					Recent sessions
+				</CardTitle>
+				<CardDescription>Sessions across all Conductor databases</CardDescription>
+			</CardHeader>
+			<CardContent>
+				{#if data.recentSessions?.length > 0}
+					<div class="space-y-2">
+						{#each data.recentSessions as session}
+							<a
+								href="/board?view=list"
+								class="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/50"
+							>
+								<div class="min-w-0">
+									<p class="truncate font-medium">
+										Session {session.session_number} · {session._sourceAlias}
+									</p>
+									<p class="text-xs text-muted-foreground">
+										{formatSessionTime(session.started_at)}
+									</p>
+								</div>
+								<Badge variant="secondary" class="shrink-0 text-xs">
+									{session.status}
+								</Badge>
+							</a>
+						{/each}
+					</div>
+					<a
+						href="/board?view=list"
+						class="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+					>
+						View all <ArrowRight class="h-4 w-4" />
+					</a>
+				{:else}
+					<p class="text-sm text-muted-foreground">
+						No sessions yet. Use Conductor MCP <code class="rounded bg-muted px-1"
+							>start_session</code
+						> in Cursor to create one.
+					</p>
+				{/if}
+			</CardContent>
+		</Card>
+
+		<Card>
+			<CardHeader>
+				<CardTitle class="flex items-center gap-2">
+					<Brain class="h-5 w-5" />
+					Recent memories
+				</CardTitle>
+				<CardDescription>Stored patterns and insights</CardDescription>
+			</CardHeader>
+			<CardContent>
+				{#if data.recentMemories?.length > 0}
+					<div class="space-y-2">
+						{#each data.recentMemories as memory}
+							<a
+								href="/memories"
+								class="block rounded-md border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/50"
+							>
+								<p class="font-medium">{memory.name}</p>
+								<p class="line-clamp-2 text-xs text-muted-foreground">
+									{truncate(memory.content, 80)}
+								</p>
+								<p class="mt-1 text-xs text-muted-foreground">
+									{formatMemoryTime(memory.created_at)} · {memory._sourceAlias}
+								</p>
+							</a>
+						{/each}
+					</div>
+					<a
+						href="/memories"
+						class="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+					>
+						View all <ArrowRight class="h-4 w-4" />
+					</a>
+				{:else}
+					<p class="text-sm text-muted-foreground">
+						No memories yet. Use Conductor MCP <code class="rounded bg-muted px-1">save_memory</code
+						> in Cursor to add one.
+					</p>
+				{/if}
+			</CardContent>
+		</Card>
+	</div>
 
 	<!-- Connected Databases -->
 	<Card>

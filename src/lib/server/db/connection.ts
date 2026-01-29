@@ -1,9 +1,17 @@
 import Database from 'better-sqlite3';
-import { statSync, existsSync } from 'fs';
+import { statSync, existsSync, realpathSync } from 'fs';
 import type { DatabaseConnection } from './types';
 
-// Store active database connections
+// Store active database connections (keyed by realpath so same physical DB is never opened twice)
 const connections = new Map<string, { db: Database.Database; meta: DatabaseConnection }>();
+
+function resolveKey(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch {
+		return path;
+	}
+}
 
 /**
  * Derive a unique alias from the database path
@@ -61,11 +69,12 @@ export function runWithWriteConnection<T>(path: string, fn: (db: Database.Databa
 }
 
 /**
- * Open a database connection in read-only mode
+ * Open a database connection in read-only mode.
+ * Keyed by realpath so the same physical file is never opened twice (e.g. after removing old paths and adding parent).
  */
 export function openDatabase(path: string): DatabaseConnection {
-	// Return existing connection if already open
-	const existing = connections.get(path);
+	const key = resolveKey(path);
+	const existing = connections.get(key);
 	if (existing) {
 		return existing.meta;
 	}
@@ -94,14 +103,14 @@ export function openDatabase(path: string): DatabaseConnection {
 	}
 
 	const meta: DatabaseConnection = {
-		path,
+		path: key,
 		alias,
 		mtime: stat.mtimeMs,
 		projectCount,
 		isValid
 	};
 
-	connections.set(path, { db, meta });
+	connections.set(key, { db, meta });
 	return meta;
 }
 
@@ -111,9 +120,17 @@ export function openDatabase(path: string): DatabaseConnection {
 export function getDatabase(
 	aliasOrPath: string
 ): { db: Database.Database; meta: DatabaseConnection } | undefined {
-	// Try by path first
 	const byPath = connections.get(aliasOrPath);
 	if (byPath) return byPath;
+
+	// Try resolved path (e.g. path string that normalizes to our key)
+	try {
+		const key = realpathSync(aliasOrPath);
+		const byResolved = connections.get(key);
+		if (byResolved) return byResolved;
+	} catch {
+		// Not a path or broken symlink
+	}
 
 	// Try by alias
 	for (const conn of connections.values()) {
@@ -145,7 +162,8 @@ export function getDatabasesMeta(): DatabaseConnection[] {
  * Update the mtime for a database
  */
 export function updateMtime(path: string): number {
-	const conn = connections.get(path);
+	const key = resolveKey(path);
+	const conn = connections.get(key);
 	if (conn && existsSync(path)) {
 		const stat = statSync(path);
 		conn.meta.mtime = stat.mtimeMs;
@@ -158,7 +176,8 @@ export function updateMtime(path: string): number {
  * Check if a database file has been modified since last check
  */
 export function checkMtimeChanged(path: string): boolean {
-	const conn = connections.get(path);
+	const key = resolveKey(path);
+	const conn = connections.get(key);
 	if (!conn || !existsSync(path)) return false;
 
 	const stat = statSync(path);
@@ -169,10 +188,11 @@ export function checkMtimeChanged(path: string): boolean {
  * Close a specific database connection
  */
 export function closeDatabase(path: string): void {
-	const conn = connections.get(path);
+	const key = resolveKey(path);
+	const conn = connections.get(key);
 	if (conn) {
 		conn.db.close();
-		connections.delete(path);
+		connections.delete(key);
 	}
 }
 

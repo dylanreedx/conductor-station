@@ -1,4 +1,4 @@
-import { readdirSync, statSync, existsSync } from 'fs';
+import { readdirSync, statSync, existsSync, realpathSync } from 'fs';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 
@@ -101,7 +101,24 @@ export function discoverDatabases(
 		}
 	}
 
-	return found;
+	// Deduplicate by realpath so same physical DB appears once (symlinks, overlapping roots)
+	const seen = new Set<string>();
+	const deduped: string[] = [];
+	for (const p of found) {
+		try {
+			const resolved = realpathSync(p);
+			if (seen.has(resolved)) continue;
+			seen.add(resolved);
+			deduped.push(p);
+		} catch {
+			// Broken symlink or other error: keep original path
+			if (!seen.has(p)) {
+				seen.add(p);
+				deduped.push(p);
+			}
+		}
+	}
+	return deduped;
 }
 
 /**

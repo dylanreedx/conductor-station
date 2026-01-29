@@ -1,7 +1,7 @@
 # Conductor Station — Handoff / Context
 
 **Last updated:** 2026-01-28  
-**Status:** Phase 1 + Phase 2 complete. Completion rules and timeline UX in place. Ready for Phase 3 or maintenance.
+**Status:** Phase 1 + Phase 2 complete. Setup wizard simplified (parent dirs + single-path fallback, realpath dedupe). Ready for Phase 3 or maintenance.
 
 ---
 
@@ -37,7 +37,7 @@ Discovery (discovery.ts) — recursive .conductor/conductor.db scan, schema vali
 ## Phase 1 Delivered
 
 - Sync engine, cache, connection pool, discovery, unified API.
-- Setup wizard (welcome → add paths → scan preview → create config).
+- Setup wizard (welcome → add paths → scan preview → create config). Step 2: parent directories (we scan inside) and single project path (fallback); both merge into `scanPaths`. Discovery deduplicates results by realpath. Log: [docs/logs/2026-01-28-setup-wizard-parent-dirs.md](logs/2026-01-28-setup-wizard-parent-dirs.md).
 - App shell: sidebar nav, live mode toggle, refresh, DB count.
 - Dashboard (`/`): stats (projects, features, sessions, memories), quality alert, connected DBs list.
 - API routes: `/api/sync/state`, `/api/sync/live`, `/api/sync/refresh`.
@@ -92,6 +92,18 @@ Log: [docs/logs/2026-01-28-phase2-feature-pages.md](logs/2026-01-28-phase2-featu
 
 - **List view** — Vertical timeline, newest session at top; expandable rows; session card max height and scrollable events; expanded events area max-height 280px.
 - **Board view** — Horizontal scroll; sessions newest-first; scroll to start on load; scroll container padding; session cards max-height 320px with scrollable events; **day bookmarks** on the rail (e.g. “Mon 27”, “Tue 28”) — click to scroll to that day.
+
+---
+
+## Conductor MCP (Cursor workflow)
+
+Station does **not** call Conductor MCP; the MCP runs in Cursor and writes to Conductor DBs. To keep the dashboard and board data useful:
+
+- **Start of work:** Call Conductor MCP `start_session` (projectName, workspacePath) so the session is tracked.
+- **During/after work:** Use `save_memory` for patterns/decisions; use `get_feature_list` / `get_next_feature` to track tasks; use `complete_session` when wrapping up.
+- **Resume context:** Use `resume_from_handoff` and `get_memories` (projectName) for the latest handoff and recent memories.
+
+See `.cursor/commands/use-conductor.md` for the command that reminds the agent to use the MCP.
 
 ---
 
