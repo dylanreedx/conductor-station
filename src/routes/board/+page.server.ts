@@ -1,4 +1,5 @@
 import { conductorAPI } from '$lib/server/db/api';
+import { getEffectiveSessionStatus } from '$lib/server/db/effectiveStatus';
 import type { SessionFilters } from '$lib/server/db/types';
 import type { TimelineData, TimelineEvent } from '$lib/board/types';
 import type { PageServerLoad } from './$types';
@@ -28,13 +29,19 @@ export const load: PageServerLoad = async ({ url }) => {
 			Promise.resolve(conductorAPI.getQualityIssues({ projectId, limit: EVENTS_LIMIT }))
 		]);
 
-	// Sort sessions by started_at ascending (oldest first) for timeline; nulls last
+	// Sort sessions newest first; nulls last
 	const sortedSessions = [...sessions].sort((a, b) => {
 		const ta = a.started_at ?? 0;
 		const tb = b.started_at ?? 0;
-		if (ta !== tb) return ta - tb;
-		return (a.completed_at ?? 0) - (b.completed_at ?? 0);
+		if (ta !== tb) return tb - ta;
+		return (b.completed_at ?? 0) - (a.completed_at ?? 0);
 	});
+
+	// Display-only: effective status (stale sessions shown as completed)
+	const sessionsWithDisplayStatus = sortedSessions.map((s) => ({
+		...s,
+		_displayStatus: getEffectiveSessionStatus(s) as 'pending' | 'active' | 'completed'
+	}));
 
 	const eventsBySession: Record<string, TimelineEvent[]> = {};
 	let timeStart = Number.MAX_SAFE_INTEGER;
@@ -75,7 +82,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	// Assign memories to sessions by project + created_at within session time range
 	for (const m of memories) {
 		if (!m._projectId) continue;
-		for (const s of sortedSessions) {
+		for (const s of sessionsWithDisplayStatus) {
 			if (s._projectId !== m._projectId) continue;
 			const start = s.started_at ?? 0;
 			const end = s.completed_at ?? Math.floor(Date.now() / 1000);
@@ -87,7 +94,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	}
 
 	// Session time range
-	for (const s of sortedSessions) {
+	for (const s of sessionsWithDisplayStatus) {
 		if (s.started_at != null) {
 			timeStart = Math.min(timeStart, s.started_at);
 			timeEnd = Math.max(timeEnd, s.completed_at ?? Math.floor(Date.now() / 1000));
@@ -101,10 +108,11 @@ export const load: PageServerLoad = async ({ url }) => {
 		eventsBySession[sid].sort((a, b) => a.timestamp - b.timestamp);
 	}
 
-	const activeSession = sortedSessions.find((s) => s.status === 'active') ?? null;
+	const activeSession =
+		sessionsWithDisplayStatus.find((s) => s._displayStatus === 'active') ?? null;
 
 	const timelineData: TimelineData = {
-		sessions: sortedSessions,
+		sessions: sessionsWithDisplayStatus,
 		eventsBySession,
 		activeSession,
 		timeRange: { start: timeStart, end: timeEnd }

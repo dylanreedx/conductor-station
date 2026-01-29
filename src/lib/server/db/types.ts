@@ -122,6 +122,8 @@ export interface AggregatedProject extends Project, SourceMeta {
 
 export interface AggregatedSession extends Session, SourceMeta {
 	_projectId: string; // Composite project ID
+	/** Display-only: effective status (e.g. stale sessions shown as completed). */
+	_displayStatus?: 'pending' | 'active' | 'completed';
 }
 
 export interface AggregatedFeature extends Feature, SourceMeta {

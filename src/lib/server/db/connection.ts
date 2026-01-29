@@ -44,6 +44,23 @@ function deriveUniqueAlias(dbPath: string): string {
 }
 
 /**
+ * Run a function with a read-write connection to the database at path.
+ * Opens a separate connection (not from the pool), runs fn, then closes.
+ * Use only for write operations (e.g. mark session complete).
+ */
+export function runWithWriteConnection<T>(path: string, fn: (db: Database.Database) => T): T {
+	if (!existsSync(path)) {
+		throw new Error(`Database not found: ${path}`);
+	}
+	const db = new Database(path, { readonly: false });
+	try {
+		return fn(db);
+	} finally {
+		db.close();
+	}
+}
+
+/**
  * Open a database connection in read-only mode
  */
 export function openDatabase(path: string): DatabaseConnection {

@@ -1,7 +1,7 @@
 # Conductor Station — Handoff / Context
 
 **Last updated:** 2026-01-28  
-**Status:** Phase 1 + Phase 2 complete. Ready for Phase 3 or maintenance.
+**Status:** Phase 1 + Phase 2 complete. Completion rules and timeline UX in place. Ready for Phase 3 or maintenance.
 
 ---
 
@@ -29,7 +29,8 @@ Discovery (discovery.ts) — recursive .conductor/conductor.db scan, schema vali
 ```
 
 - **Composite IDs:** `alias:uuid` (e.g. `selectus:abc-123`) for cross-DB uniqueness.
-- **Types:** `src/lib/server/db/types.ts` — base types (Project, Session, Feature, Memory, Handoff, Commit, FeatureError, QualityReflection), aggregated types with `_id`, `_sourceDb`, `_sourceAlias`, filter types, DashboardStats, SyncState, Config.
+- **Types:** `src/lib/server/db/types.ts` — base types (Project, Session, Feature, Memory, Handoff, Commit, FeatureError, QualityReflection), aggregated types with `_id`, `_sourceDb`, `_sourceAlias`, optional `_displayStatus`, filter types, DashboardStats, SyncState, Config.
+- **Effective status (display-only):** `src/lib/server/db/effectiveStatus.ts` — session treated as **completed** if last activity &gt; 2 days; project treated as **completed** if last activity &gt; 1 week. Used for dashboard stats (active count) and board/timeline UI only; no writes to Conductor DBs.
 
 ---
 
@@ -53,7 +54,7 @@ Log: [docs/logs/2026-01-28-phase1-foundation.md](logs/2026-01-28-phase1-foundati
 
 3. **Features** (`/features`) — Filters (project, status, phase, category, search) and pagination via URL. Table: description, status, phase, category, project/source, priority. Data: `getFeatures(filters)`, `getProjects()`.
 
-4. **Sessions** (`/sessions`) — Filters (project, status). Vertical timeline: session number, source, status, started/completed, progress notes. Data: `getSessions(filters)`, `getProjects()`. Dates via `date-fns`.
+4. **Sessions** (`/sessions`) — Redirects to `/board?view=list`. Board/timeline: sessions sorted **newest first**; list and board views; effective status (stale sessions shown as completed after 2 days).
 
 5. **Memories** (`/memories`) — Search input + project filter. If `q`/`query` param: `searchMemories(query, limit)`; else `getMemories(filters)`. Results: name, snippet, tags, source.
 
@@ -67,21 +68,30 @@ Log: [docs/logs/2026-01-28-phase2-feature-pages.md](logs/2026-01-28-phase2-featu
 
 ## Key Files
 
-| Area                         | Path                                                  |
-| ---------------------------- | ----------------------------------------------------- |
-| API                          | `src/lib/server/db/api.ts`                            |
-| Types                        | `src/lib/server/db/types.ts`                          |
-| Config                       | `src/lib/server/config.ts`                            |
-| Query keys                   | `src/lib/query/keys.ts`                               |
-| Layout (shell + QueryClient) | `src/routes/+layout.svelte`                           |
-| Dashboard                    | `src/routes/+page.svelte`                             |
-| Projects                     | `src/routes/projects/+page.server.ts`, `+page.svelte` |
-| Features                     | `src/routes/features/+page.server.ts`, `+page.svelte` |
-| Sessions                     | `src/routes/sessions/+page.server.ts`, `+page.svelte` |
-| Memories                     | `src/routes/memories/+page.server.ts`, `+page.svelte` |
-| Quality                      | `src/routes/quality/+page.server.ts`, `+page.svelte`  |
-| Settings                     | `src/routes/settings/+page.server.ts`, `+page.svelte` |
-| Setup wizard                 | `src/routes/setup/+page.server.ts`, `+page.svelte`    |
+| Area                         | Path                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API                          | `src/lib/server/db/api.ts`                                                                                                                                    |
+| Types                        | `src/lib/server/db/types.ts`                                                                                                                                  |
+| Config                       | `src/lib/server/config.ts`                                                                                                                                    |
+| Query keys                   | `src/lib/query/keys.ts`                                                                                                                                       |
+| Layout (shell + QueryClient) | `src/routes/+layout.svelte`                                                                                                                                   |
+| Dashboard                    | `src/routes/+page.svelte`                                                                                                                                     |
+| Projects                     | `src/routes/projects/+page.server.ts`, `+page.svelte`                                                                                                         |
+| Features                     | `src/routes/features/+page.server.ts`, `+page.svelte`                                                                                                         |
+| Sessions                     | `src/routes/sessions/+page.server.ts`, `+page.svelte`                                                                                                         |
+| Memories                     | `src/routes/memories/+page.server.ts`, `+page.svelte`                                                                                                         |
+| Quality                      | `src/routes/quality/+page.server.ts`, `+page.svelte`                                                                                                          |
+| Settings                     | `src/routes/settings/+page.server.ts`, `+page.svelte`                                                                                                         |
+| Setup wizard                 | `src/routes/setup/+page.server.ts`, `+page.svelte`                                                                                                            |
+| Effective status             | `src/lib/server/db/effectiveStatus.ts`                                                                                                                        |
+| Board / timeline             | `src/routes/board/+page.server.ts`, `+page.svelte`, `components/TimelineBoard.svelte`, `SessionListView.svelte`, `TimelineRail.svelte`, `SessionBlock.svelte` |
+
+---
+
+## Timeline Board (Board view)
+
+- **List view** — Vertical timeline, newest session at top; expandable rows; session card max height and scrollable events; expanded events area max-height 280px.
+- **Board view** — Horizontal scroll; sessions newest-first; scroll to start on load; scroll container padding; session cards max-height 320px with scrollable events; **day bookmarks** on the rail (e.g. “Mon 27”, “Tue 28”) — click to scroll to that day.
 
 ---
 
@@ -96,6 +106,7 @@ Log: [docs/logs/2026-01-28-phase2-feature-pages.md](logs/2026-01-28-phase2-featu
 
 ## Next Steps (Optional)
 
-- Use TanStack Query on specific pages (e.g. `createQuery` + `initialData` from load) for client caching/refetch.
-- Detail routes: `/projects/[id]`, `/features/[id]` when needed.
+- Use TanStack Query on board page for client refetch on sync.
+- Detail routes: `/board/session/[id]`, `/projects/[id]`, `/features/[id]` when needed.
 - Invalidate TanStack Query cache on “Refresh” or after rescan.
+- Position session blocks by time on board view (align with rail).

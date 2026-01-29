@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
 	import type { TimelineData } from '$lib/board/types';
 	import type { TimelineEvent } from '$lib/board/types';
+	import type { AggregatedSession } from '$lib/server/db/types';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
 	import { Clock, Loader2, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-svelte';
 	import { format, formatDistanceToNow } from 'date-fns';
 	import FeatureCard from './FeatureCard.svelte';
@@ -22,6 +25,28 @@
 	const sessions = $derived(timelineData.sessions);
 	const eventsBySession = $derived(timelineData.eventsBySession);
 	const activeSession = $derived(timelineData.activeSession);
+
+	const displayStatus = (s: (typeof sessions)[0]) => s._displayStatus ?? s.status;
+
+	// Track which session is being marked complete
+	let completingId = $state<string | null>(null);
+
+	async function markComplete(session: AggregatedSession) {
+		if (completingId || displayStatus(session) === 'completed') return;
+		completingId = session._id;
+		try {
+			const res = await fetch('/api/sessions/complete', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ sessionId: session._id })
+			});
+			if (res.ok) {
+				await invalidateAll();
+			}
+		} finally {
+			completingId = null;
+		}
+	}
 
 	// Track which session rows are expanded (by session._id)
 	let expandedIds = $state<Set<string>>(new Set());
@@ -92,7 +117,7 @@
 					>
 						{#if isActive}
 							<Loader2 class="h-4 w-4 animate-spin text-primary" />
-						{:else if session.status === 'completed'}
+						{:else if displayStatus(session) === 'completed'}
 							<CheckCircle2 class="h-4 w-4 text-green-500" />
 						{:else}
 							<Clock class="h-4 w-4 text-muted-foreground" />
@@ -129,7 +154,22 @@
 									</p>
 								</div>
 							</div>
-							<Badge variant={isActive ? 'default' : 'secondary'}>{session.status}</Badge>
+							<div class="flex items-center gap-2">
+								{#if displayStatus(session) !== 'completed'}
+									<Button
+										variant="outline"
+										size="sm"
+										class="shrink-0"
+										disabled={completingId === session._id}
+										onclick={() => markComplete(session)}
+										title="Mark session complete"
+									>
+										<CheckCircle2 class="size-3.5" />
+										{completingId === session._id ? '…' : 'Complete'}
+									</Button>
+								{/if}
+								<Badge variant={isActive ? 'default' : 'secondary'}>{displayStatus(session)}</Badge>
+							</div>
 							<span class="w-full text-left text-xs text-muted-foreground sm:w-auto">
 								{eventSummary(events)}
 							</span>
@@ -144,12 +184,12 @@
 								{#if session.progress_notes}
 									<p class="mb-3 text-sm text-muted-foreground">{session.progress_notes}</p>
 								{/if}
-								{#if session.completed_at && session.status === 'completed'}
+								{#if session.completed_at && displayStatus(session) === 'completed'}
 									<p class="mb-3 text-xs text-muted-foreground">
 										Completed {formatTs(session.completed_at)}
 									</p>
 								{/if}
-								<div class="flex flex-wrap gap-2">
+								<div class="flex max-h-[280px] flex-wrap gap-2 overflow-y-auto">
 									{#each events as event (`${event.type}-${event.data._id}-${event.timestamp}`)}
 										{#if event.type === 'feature'}
 											<FeatureCard feature={event.data} />

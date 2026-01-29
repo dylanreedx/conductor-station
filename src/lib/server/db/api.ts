@@ -3,11 +3,13 @@ import {
 	getDatabase,
 	openDatabase,
 	closeAll,
-	getDatabasesMeta
+	getDatabasesMeta,
+	runWithWriteConnection
 } from './connection';
 import { discoverDatabases, discoverDatabasesDetailed } from './discovery';
 import { queryCache } from './cache';
 import { syncEngine } from './sync';
+import { getEffectiveSessionStatus } from './effectiveStatus';
 import type {
 	Project,
 	Session,
@@ -884,10 +886,14 @@ class ConductorAPI {
 				};
 				stats.totalSessions += sessionCount.count;
 
-				const activeCount = conn.db
-					.prepare("SELECT COUNT(*) as count FROM sessions WHERE status = 'active'")
-					.get() as { count: number };
-				stats.activeSessions += activeCount.count;
+				const sessions = conn.db
+					.prepare('SELECT status, started_at, completed_at FROM sessions')
+					.all() as { status: string; started_at: number | null; completed_at: number | null }[];
+				for (const s of sessions) {
+					if (getEffectiveSessionStatus(s) !== 'completed') {
+						stats.activeSessions += 1;
+					}
+				}
 
 				// Memories
 				const memoryCount = conn.db.prepare('SELECT COUNT(*) as count FROM memories').get() as {
@@ -991,6 +997,30 @@ class ConductorAPI {
 		maxDepth?: number
 	): ReturnType<typeof discoverDatabasesDetailed> {
 		return discoverDatabasesDetailed(scanPaths, excludePatterns, maxDepth);
+	}
+
+	// ===================
+	// SESSION WRITE (mark complete)
+	// ===================
+
+	/**
+	 * Mark a session as completed in its Conductor DB.
+	 * Opens the DB in read-write mode, updates the session, then invalidates cache.
+	 */
+	completeSession(compositeId: string, progressNotes?: string | null): void {
+		const [alias, id] = this.parseCompositeId(compositeId);
+		const conn = getDatabase(alias);
+		if (!conn) {
+			throw new Error(`Database not found for alias: ${alias}`);
+		}
+		const nowSec = Math.floor(Date.now() / 1000);
+		runWithWriteConnection(conn.meta.path, (db) => {
+			db.prepare(
+				`UPDATE sessions SET status = 'completed', completed_at = ?, progress_notes = COALESCE(?, progress_notes) WHERE id = ?`
+			).run(nowSec, progressNotes ?? null, id);
+		});
+		queryCache.invalidateBySource([alias]);
+		this.notifyListeners();
 	}
 
 	// ===================
