@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import type { Config } from './db/types';
 
@@ -37,6 +37,16 @@ export const DEFAULT_CONFIG: Config = {
 	},
 	theme: 'system'
 };
+
+/**
+ * Delete the config file. No-op if it does not exist.
+ */
+export function deleteConfig(): void {
+	const configPath = getConfigPath();
+	if (existsSync(configPath)) {
+		unlinkSync(configPath);
+	}
+}
 
 /**
  * Check if config file exists

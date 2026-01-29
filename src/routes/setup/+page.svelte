@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { tick } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import {
 		Card,
@@ -11,6 +12,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		Database,
 		FolderSearch,
@@ -18,7 +20,10 @@
 		Trash2,
 		ArrowRight,
 		CheckCircle2,
-		Loader2
+		Loader2,
+		Folder,
+		FolderOpen,
+		ChevronLeft
 	} from 'lucide-svelte';
 
 	type Database = {
@@ -28,6 +33,8 @@
 		isValid: boolean;
 	};
 
+	type DirEntry = { name: string; path: string };
+
 	let step = $state<1 | 2 | 3>(1);
 	let parentDirs = $state<string[]>([]);
 	let singlePaths = $state<string[]>([]);
@@ -36,6 +43,18 @@
 	let databases = $state<Database[]>([]);
 	let scanning = $state(false);
 	let error = $state<string | null>(null);
+
+	// Browse dialog
+	let browseOpen = $state(false);
+	let browseTarget = $state<'parent' | 'single'>('parent');
+	let browsePath = $state('');
+	let browseLoading = $state(false);
+	let browseError = $state<string | null>(null);
+	let browseRoots = $state<DirEntry[]>([]);
+	let browseChildren = $state<DirEntry[]>([]);
+	let browseCurrentPath = $state<string | null>(null);
+	let browseParent = $state<string | null | 'roots'>(null);
+	let browseFormEl = $state<HTMLFormElement | null>(null);
 
 	// Merged for form submit (same scanPaths config)
 	let paths = $derived([...parentDirs, ...singlePaths]);
@@ -76,6 +95,73 @@
 			e.preventDefault();
 			addSinglePath();
 		}
+	}
+
+	function openBrowse(target: 'parent' | 'single') {
+		browseTarget = target;
+		browseOpen = true;
+		browsePath = '';
+		browseRoots = [];
+		browseChildren = [];
+		browseCurrentPath = null;
+		browseParent = null;
+		browseError = null;
+		loadBrowse('');
+	}
+
+	async function loadBrowse(path: string) {
+		browsePath = path;
+		browseLoading = true;
+		browseError = null;
+		await tick();
+		browseFormEl?.requestSubmit();
+	}
+
+	function handleBrowseResult(result: { type: string; data?: unknown }) {
+		browseLoading = false;
+		if (
+			result.type === 'failure' &&
+			result.data &&
+			typeof result.data === 'object' &&
+			'error' in result.data
+		) {
+			browseError = result.data.error as string;
+			return;
+		}
+		browseError = null;
+		const data = result.data as Record<string, unknown> | undefined;
+		if (!data) return;
+		if ('roots' in data && Array.isArray(data.roots)) {
+			browseRoots = data.roots as DirEntry[];
+			browseChildren = [];
+			browseCurrentPath = null;
+			browseParent = null;
+		} else if ('children' in data && Array.isArray(data.children)) {
+			browseChildren = data.children as DirEntry[];
+			browseCurrentPath = (data.currentPath as string) ?? null;
+			browseParent = (data.parent as string | null | 'roots') ?? null;
+			browseRoots = [];
+		}
+	}
+
+	function selectCurrentFolder() {
+		const path = browseCurrentPath;
+		if (!path) return;
+		if (browseTarget === 'parent') {
+			if (!parentDirs.includes(path)) parentDirs = [...parentDirs, path];
+		} else {
+			if (!singlePaths.includes(path)) singlePaths = [...singlePaths, path];
+		}
+		browseOpen = false;
+	}
+
+	function selectPath(path: string) {
+		if (browseTarget === 'parent') {
+			if (!parentDirs.includes(path)) parentDirs = [...parentDirs, path];
+		} else {
+			if (!singlePaths.includes(path)) singlePaths = [...singlePaths, path];
+		}
+		browseOpen = false;
 	}
 </script>
 
@@ -141,6 +227,9 @@
 							onkeydown={handleParentKeydown}
 							class="flex-1"
 						/>
+						<Button variant="outline" onclick={() => openBrowse('parent')} title="Browse">
+							<FolderOpen class="h-4 w-4" />
+						</Button>
 						<Button variant="outline" onclick={addParentDir} disabled={!newParentPath.trim()}>
 							<Plus class="h-4 w-4" />
 						</Button>
@@ -178,6 +267,9 @@
 							onkeydown={handleSingleKeydown}
 							class="flex-1"
 						/>
+						<Button variant="outline" onclick={() => openBrowse('single')} title="Browse">
+							<FolderOpen class="h-4 w-4" />
+						</Button>
 						<Button variant="outline" onclick={addSinglePath} disabled={!newSinglePath.trim()}>
 							<Plus class="h-4 w-4" />
 						</Button>
@@ -302,4 +394,105 @@
 			</CardContent>
 		{/if}
 	</Card>
+
+	<!-- Browse directory picker -->
+	<Dialog.Root bind:open={browseOpen}>
+		<Dialog.Content class="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+			<Dialog.Header>
+				<Dialog.Title>Select directory</Dialog.Title>
+				<Dialog.Description>
+					{browseTarget === 'parent'
+						? 'Choose a parent directory to scan'
+						: 'Choose a single project path'}
+				</Dialog.Description>
+			</Dialog.Header>
+			<form
+				method="POST"
+				action="?/browse"
+				bind:this={browseFormEl}
+				use:enhance={() => {
+					return async ({ result }) => {
+						handleBrowseResult(result);
+					};
+				}}
+			>
+				<input type="hidden" name="path" value={browsePath} />
+			</form>
+			{#if browseError}
+				<p class="text-sm text-destructive">{browseError}</p>
+			{/if}
+			{#if browseLoading}
+				<div class="flex items-center justify-center py-8">
+					<Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
+				</div>
+			{:else}
+				<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+					{#if browseCurrentPath}
+						<div class="flex shrink-0 items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+							<code class="min-w-0 flex-1 truncate text-sm">{browseCurrentPath}</code>
+							<Button size="sm" class="shrink-0" onclick={selectCurrentFolder}
+								>Select this folder</Button
+							>
+						</div>
+						{#if browseParent !== null}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="w-full justify-start"
+								onclick={() => loadBrowse(browseParent === 'roots' ? '' : (browseParent ?? ''))}
+							>
+								<ChevronLeft class="mr-2 h-4 w-4" />
+								Back
+							</Button>
+						{/if}
+					{/if}
+					<div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto rounded-md border">
+						{#each browseRoots as entry}
+							<div class="flex min-w-0 shrink-0 items-center gap-2 px-3 py-2 hover:bg-muted/50">
+								<button
+									type="button"
+									class="flex min-w-0 flex-1 items-center gap-2 text-left"
+									onclick={() => loadBrowse(entry.path)}
+								>
+									<Folder class="h-4 w-4 shrink-0 text-muted-foreground" />
+									<span class="min-w-0 truncate">{entry.name}</span>
+								</button>
+								<Button
+									size="sm"
+									variant="ghost"
+									class="shrink-0"
+									onclick={() => selectPath(entry.path)}
+								>
+									Select
+								</Button>
+							</div>
+						{/each}
+						{#each browseChildren as entry}
+							<div class="flex min-w-0 shrink-0 items-center gap-2 px-3 py-2 hover:bg-muted/50">
+								<button
+									type="button"
+									class="flex min-w-0 flex-1 items-center gap-2 text-left"
+									onclick={() => loadBrowse(entry.path)}
+								>
+									<Folder class="h-4 w-4 shrink-0 text-muted-foreground" />
+									<span class="min-w-0 truncate">{entry.name}</span>
+								</button>
+								<Button
+									size="sm"
+									variant="ghost"
+									class="shrink-0"
+									onclick={() => selectPath(entry.path)}
+								>
+									Select
+								</Button>
+							</div>
+						{/each}
+					</div>
+					{#if browseRoots.length === 0 && browseChildren.length === 0 && !browseLoading}
+						<p class="py-4 text-center text-sm text-muted-foreground">No subdirectories</p>
+					{/if}
+				</div>
+			{/if}
+		</Dialog.Content>
+	</Dialog.Root>
 </div>

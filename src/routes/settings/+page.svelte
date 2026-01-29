@@ -9,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Separator } from '$lib/components/ui/separator';
-	import { Settings, Plus, Trash2, FolderSearch } from 'lucide-svelte';
+	import { Settings, Plus, Trash2, FolderSearch, RotateCcw } from 'lucide-svelte';
 
 	let { data } = $props();
 
@@ -33,6 +33,14 @@
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			addPath();
+		}
+	}
+
+	function handleResetSubmit(e: SubmitEvent) {
+		if (
+			!confirm('This will remove your scan paths and return you to the setup wizard. Continue?')
+		) {
+			e.preventDefault();
 		}
 	}
 </script>
@@ -119,6 +127,24 @@
 		<CardContent class="space-y-2 text-sm text-muted-foreground">
 			<p>Scan depth: {data.scanDepth}</p>
 			<p>Exclude patterns: {data.excludePatterns.join(', ')}</p>
+		</CardContent>
+	</Card>
+
+	<Card class="border-destructive/50">
+		<CardHeader>
+			<CardTitle class="flex items-center gap-2 text-destructive">
+				<RotateCcw class="h-5 w-5" />
+				Reset to setup wizard
+			</CardTitle>
+			<CardDescription>
+				Remove your config and return to the setup wizard to re-add paths and re-scan all Conductor
+				databases from scratch.
+			</CardDescription>
+		</CardHeader>
+		<CardContent>
+			<form method="post" action="?/reset" onsubmit={handleResetSubmit}>
+				<Button type="submit" variant="destructive">Reset to setup wizard</Button>
+			</form>
 		</CardContent>
 	</Card>
 </div>

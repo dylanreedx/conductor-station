@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { loadConfig, updateScanPaths } from '$lib/server/config';
+import { loadConfig, updateScanPaths, deleteConfig } from '$lib/server/config';
 import { conductorAPI } from '$lib/server/db/api';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -59,5 +59,14 @@ export const actions: Actions = {
 		conductorAPI.rescan(config);
 
 		throw redirect(303, '/settings');
+	},
+
+	/**
+	 * Reset to setup wizard: shutdown API, delete config, redirect to /setup
+	 */
+	reset: async () => {
+		conductorAPI.shutdown();
+		deleteConfig();
+		throw redirect(303, '/setup');
 	}
 };
