@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { AggregatedHandoff } from '$lib/server/db/types';
-	import * as Popover from '$lib/components/ui/popover';
+	import * as HoverCard from '$lib/components/ui/hover-card';
 	import { ArrowRightLeft } from 'lucide-svelte';
 	import { format } from 'date-fns';
 	import { cn } from '$lib/utils';
@@ -11,8 +11,6 @@
 	}
 
 	let { handoff, class: className = '' }: Props = $props();
-
-	let open = $state(false);
 
 	function parseJson(s: string | null): string[] {
 		if (!s) return [];
@@ -29,8 +27,8 @@
 	const filesModified = $derived(parseJson(handoff.files_modified));
 </script>
 
-<Popover.Root bind:open>
-	<Popover.Trigger>
+<HoverCard.Root openDelay={400} closeDelay={150}>
+	<HoverCard.Trigger>
 		{#snippet child({ props })}
 			<button
 				{...props}
@@ -44,8 +42,8 @@
 				Handoff
 			</button>
 		{/snippet}
-	</Popover.Trigger>
-	<Popover.Content class="w-80 p-3" align="center">
+	</HoverCard.Trigger>
+	<HoverCard.Content class="w-80 p-3" align="center">
 		<p class="text-xs text-muted-foreground">
 			{format(handoff.created_at * 1000, 'MMM d, yyyy HH:mm')}
 		</p>
@@ -80,5 +78,5 @@
 		{#if handoff.git_commit}
 			<p class="mt-2 font-mono text-xs text-muted-foreground">Commit: {handoff.git_commit}</p>
 		{/if}
-	</Popover.Content>
-</Popover.Root>
+	</HoverCard.Content>
+</HoverCard.Root>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { AggregatedCommit } from '$lib/server/db/types';
-	import * as Popover from '$lib/components/ui/popover';
+	import * as HoverCard from '$lib/components/ui/hover-card';
 	import { GitCommit } from 'lucide-svelte';
 	import { format } from 'date-fns';
 	import { cn } from '$lib/utils';
@@ -11,12 +11,10 @@
 	}
 
 	let { commit, class: className = '' }: Props = $props();
-
-	let open = $state(false);
 </script>
 
-<Popover.Root bind:open>
-	<Popover.Trigger>
+<HoverCard.Root openDelay={400} closeDelay={150}>
+	<HoverCard.Trigger>
 		{#snippet child({ props })}
 			<button
 				{...props}
@@ -25,13 +23,12 @@
 					'flex h-6 w-6 items-center justify-center rounded-full border-2 border-primary/50 bg-primary/10 text-primary transition-colors hover:bg-primary/20',
 					className
 				)}
-				title={commit.message ?? commit.commit_hash}
 			>
 				<GitCommit class="h-3 w-3" />
 			</button>
 		{/snippet}
-	</Popover.Trigger>
-	<Popover.Content class="w-72 p-2" align="center">
+	</HoverCard.Trigger>
+	<HoverCard.Content class="w-72 p-2" align="center">
 		<p class="font-mono text-xs text-muted-foreground">{commit.commit_hash.slice(0, 7)}</p>
 		{#if commit.message}
 			<p class="mt-1 text-sm">{commit.message}</p>
@@ -50,5 +47,5 @@
 				</p>
 			{/if}
 		{/if}
-	</Popover.Content>
-</Popover.Root>
+	</HoverCard.Content>
+</HoverCard.Root>

@@ -93,15 +93,21 @@ export const load: PageServerLoad = async ({ url }) => {
 		}
 	}
 
-	// Session time range
+	// Session time range: use effective end (lastActivity for stale sessions, not "now")
+	const nowSec = Math.floor(Date.now() / 1000);
 	for (const s of sessionsWithDisplayStatus) {
 		if (s.started_at != null) {
 			timeStart = Math.min(timeStart, s.started_at);
-			timeEnd = Math.max(timeEnd, s.completed_at ?? Math.floor(Date.now() / 1000));
+			const lastActivity = s.completed_at ?? s.started_at;
+			const effectiveEnd =
+				s.completed_at ?? (s._displayStatus === 'active' ? nowSec : (lastActivity ?? nowSec));
+			timeEnd = Math.max(timeEnd, effectiveEnd);
 		}
 	}
 	if (timeStart === Number.MAX_SAFE_INTEGER) timeStart = 0;
-	if (timeEnd === 0) timeEnd = Math.floor(Date.now() / 1000);
+	if (timeEnd === 0) timeEnd = nowSec;
+	// Always extend to "now" so today's day column appears in nav (handles stale data)
+	timeEnd = Math.max(timeEnd, nowSec);
 
 	// Sort events within each session by timestamp
 	for (const sid of Object.keys(eventsBySession)) {

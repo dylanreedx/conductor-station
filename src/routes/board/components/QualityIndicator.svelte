@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { AggregatedQualityReflection } from '$lib/server/db/types';
-	import * as Popover from '$lib/components/ui/popover';
+	import * as HoverCard from '$lib/components/ui/hover-card';
 	import { FileWarning } from 'lucide-svelte';
 	import { format } from 'date-fns';
 	import { cn } from '$lib/utils';
@@ -11,8 +11,6 @@
 	}
 
 	let { quality, class: className = '' }: Props = $props();
-
-	let open = $state(false);
 
 	function parseJson(s: string | null): string[] {
 		if (!s) return [];
@@ -25,8 +23,8 @@
 	}
 </script>
 
-<Popover.Root bind:open>
-	<Popover.Trigger>
+<HoverCard.Root openDelay={400} closeDelay={150}>
+	<HoverCard.Trigger>
 		{#snippet child({ props })}
 			<button
 				{...props}
@@ -40,8 +38,8 @@
 				{quality.reflection_type}
 			</button>
 		{/snippet}
-	</Popover.Trigger>
-	<Popover.Content class="max-h-64 w-72 overflow-y-auto p-3" align="center">
+	</HoverCard.Trigger>
+	<HoverCard.Content class="max-h-64 w-72 overflow-y-auto p-3" align="center">
 		<p class="text-xs text-muted-foreground">
 			{format(quality.created_at * 1000, 'MMM d, HH:mm')}
 		</p>
@@ -56,5 +54,5 @@
 				</ul>
 			{/if}
 		{/each}
-	</Popover.Content>
-</Popover.Root>
+	</HoverCard.Content>
+</HoverCard.Root>

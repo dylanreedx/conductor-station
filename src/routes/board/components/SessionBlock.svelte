@@ -4,7 +4,7 @@
 	import type { TimelineEvent } from '$lib/board/types';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
-	import { Clock, Loader2, CheckCircle2 } from 'lucide-svelte';
+	import { Clock, Loader2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-svelte';
 	import { format } from 'date-fns';
 	import FeatureCard from './FeatureCard.svelte';
 	import ErrorIndicator from './ErrorIndicator.svelte';
@@ -18,10 +18,24 @@
 		session: AggregatedSession;
 		events: TimelineEvent[];
 		isActive: boolean;
+		/** Width in px when positioned on timeline (variable-width mode) */
+		widthPx?: number;
+		/** When true, card is expanded (50% wider) - board view only */
+		isExpanded?: boolean;
+		/** Called when expand toggle is clicked - board view only */
+		onToggleExpand?: () => void;
 		class?: string;
 	}
 
-	let { session, events, isActive, class: className = '' }: Props = $props();
+	let {
+		session,
+		events,
+		isActive,
+		widthPx,
+		isExpanded = false,
+		onToggleExpand,
+		class: className = ''
+	}: Props = $props();
 
 	const displayStatus = $derived(session._displayStatus ?? session.status);
 	let completing = $state(false);
@@ -55,37 +69,77 @@
 
 <div
 	class={cn(
-		'flex max-h-[320px] max-w-[320px] min-w-[260px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border bg-card p-4 shadow-sm transition-shadow',
+		'flex h-full flex-col overflow-hidden rounded-lg border bg-card p-3 shadow-sm transition-shadow',
+		widthPx != null
+			? 'min-w-0 shrink-0'
+			: 'max-h-[320px] max-w-[320px] min-w-[260px] snap-start p-4',
 		isActive && 'animate-pulse border-primary ring-2 ring-primary/20',
 		className
 	)}
+	style={widthPx != null ? 'width: 100%; min-width: 0;' : undefined}
 >
-	<div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
-		<div class="flex items-center gap-2">
+	<div
+		class={cn(
+			'flex shrink-0 flex-wrap items-center justify-between gap-2',
+			widthPx != null && widthPx < 200 && 'gap-1'
+		)}
+	>
+		<div class="flex min-w-0 items-center gap-2">
 			<div
 				class={cn(
-					'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2',
+					'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2',
+					widthPx != null && widthPx < 200 && 'h-6 w-6',
 					isActive ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50'
 				)}
 			>
 				{#if isActive}
-					<Loader2 class="h-4 w-4 animate-spin text-primary" />
+					<Loader2 class="h-3.5 w-3.5 animate-spin text-primary" />
 				{:else if displayStatus === 'completed'}
-					<CheckCircle2 class="h-4 w-4 text-green-500" />
+					<CheckCircle2 class="h-3.5 w-3.5 text-green-500" />
 				{:else}
-					<Clock class="h-4 w-4 text-muted-foreground" />
+					<Clock class="h-3.5 w-3.5 text-muted-foreground" />
 				{/if}
 			</div>
-			<div>
-				<p class="font-medium">
+			<div
+				class="min-w-0"
+				title={widthPx != null && widthPx < 180
+					? `Started: ${formatTs(session.started_at)}`
+					: undefined}
+			>
+				<p class="truncate text-sm font-medium">
 					Session #{session.session_number}
 					<span class="ml-1 text-xs text-muted-foreground">{session._sourceAlias}</span>
 				</p>
-				<p class="text-xs text-muted-foreground">{formatTs(session.started_at)}</p>
+				{#if widthPx == null || widthPx >= 180}
+					<p class="truncate text-[10px] text-muted-foreground">{formatTs(session.started_at)}</p>
+				{:else if widthPx != null}
+					<p class="truncate text-[10px] text-muted-foreground">
+						{session.started_at != null
+							? format(new Date(session.started_at * 1000), 'HH:mm')
+							: '—'}
+					</p>
+				{/if}
 			</div>
 		</div>
-		<div class="flex items-center gap-1.5">
-			{#if displayStatus !== 'completed'}
+		<div class="flex shrink-0 items-center gap-1.5">
+			{#if widthPx != null && onToggleExpand && events.length >= 5}
+				<button
+					type="button"
+					class="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					title={isExpanded ? 'Collapse' : 'Expand'}
+					onclick={(e) => {
+						e.stopPropagation();
+						onToggleExpand();
+					}}
+				>
+					{#if isExpanded}
+						<ChevronUp class="h-3.5 w-3.5" />
+					{:else}
+						<ChevronDown class="h-3.5 w-3.5" />
+					{/if}
+				</button>
+			{/if}
+			{#if displayStatus !== 'completed' && (widthPx == null || widthPx >= 200)}
 				<Button
 					variant="outline"
 					size="sm"
@@ -98,15 +152,23 @@
 					{completing ? '…' : 'Complete'}
 				</Button>
 			{/if}
-			<Badge variant={isActive ? 'default' : 'secondary'}>{displayStatus}</Badge>
+			<Badge variant={isActive ? 'default' : 'secondary'} class="text-[10px]">{displayStatus}</Badge
+			>
 		</div>
 	</div>
 
-	{#if session.progress_notes}
-		<p class="mt-2 line-clamp-2 shrink-0 text-xs text-muted-foreground">{session.progress_notes}</p>
+	{#if session.progress_notes && (widthPx == null || widthPx >= 220)}
+		<p class="mt-1.5 line-clamp-2 shrink-0 text-xs text-muted-foreground">
+			{session.progress_notes}
+		</p>
 	{/if}
 
-	<div class="mt-3 flex min-h-0 flex-1 flex-wrap content-start gap-2 overflow-y-auto">
+	<div
+		class={cn(
+			'scrollbar-none flex min-h-0 flex-1 flex-wrap content-start overflow-y-auto',
+			widthPx != null ? 'mt-1.5 gap-1.5' : 'mt-3 gap-2'
+		)}
+	>
 		{#each events as event (`${event.type}-${event.data._id}-${event.timestamp}`)}
 			{#if event.type === 'feature'}
 				<FeatureCard feature={event.data} />
