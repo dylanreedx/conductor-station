@@ -1,0 +1,11 @@
+{
+	"mcpServers": {
+		"conductor": {
+			"command": "/Users/dylan/.nvm/versions/node/v24.5.0/bin/conductor-mcp",
+			"args": ["run"],
+			"env": {
+				"CONDUCTOR_DB_PATH": "/Users/dylan/Documents/work/conductor-station/.conductor/conductor.db"
+			}
+		}
+	}
+}
